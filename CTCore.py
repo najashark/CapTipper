@@ -31,9 +31,11 @@ objects = []
 Errors = []
 hosts = collections.OrderedDict()
 request_logs = []
+plugins = []
+plugins_folder = "plugins/"
 pcap_file = ""
-VERSION = "0.2"
-BUILD = "10"
+VERSION = "0.3"
+BUILD = "13"
 ABOUT = "CapTipper v" + VERSION + " b" + BUILD + " - Malicious HTTP traffic explorer tool" + newLine + \
         "Copyright 2015 Omri Herscovici <omriher@gmail.com>" + newLine
 
@@ -46,8 +48,10 @@ USAGE = ("CapTipper.py <pcap_file> [options]" + newLine + newLine +
 
 # WS configurations
 web_server_turned_on = False
-HOST = "localhost"
+HOST = "0.0.0.0"
 PORT = 80
+
+console_output = False
 
 b_use_short_uri = False
 b_auto_ungzip = False
@@ -156,16 +160,20 @@ def show_hosts():
     for host, ip in hosts.keys():
         print " " + host + " ({})".format(ip)
         hostkey = (host, ip)
-        for host_uri in hosts[hostkey]:
+        for host_uri,obj_num in hosts[hostkey]:
             #chr_num = 195 # Extended ASCII tree symbol
             chr_num = 9500  # UNICODE tree symbol
 
             # Checks if last one
-            if (host_uri == hosts[hostkey][len(hosts[hostkey]) - 1]):
+            if ((host_uri,obj_num) == hosts[hostkey][len(hosts[hostkey]) - 1]):
                 #chr_num = 192 # Extended ASCII tree symbol
                 chr_num = 9492 # UNICODE tree symbol
 
-            print " " + unichr(chr_num) + "-- " + host_uri.encode('utf8')
+            try:
+                print " " + unichr(chr_num) + "-- " + host_uri.encode('utf8') + "   [{}]".format(obj_num)
+            except:
+                print " |-- " + host_uri.encode('utf8') + "   [{}]".format(obj_num)
+
         print newLine
 
 def check_duplicate_url(host, uri):
@@ -206,33 +214,52 @@ def getShortURI(uri):
         shortURL = uri[0:int(SHORT_URI_SIZE/2)] + "..." + uri[len(uri)-int(SHORT_URI_SIZE/2):len(uri)]
     return shortURL
 
+def byTime(Conv):
+    return int(Conv.req_microsec)
+
+def sort_convs():
+    conversations.sort(key=byTime)
+    for cnt, conv in enumerate(conversations):
+        conv.id = cnt
+        add_object("body", conv.res_body)
+        objects[cnt].name = conv.filename
+
+        # Populating hosts list
+        host_tuple = (conv.host, conv.server_ip_port)
+        if (hosts.has_key(host_tuple)):
+            hosts[host_tuple].append((conv.uri,str(cnt)))
+        else:
+            hosts[host_tuple] = [(conv.uri,str(cnt))]
+
+
+def check_order(Conv):
+    for curr_conv in conversations:
+        if int(curr_conv.req_microsec) > int(str(Conv.time)[:10]):
+            return False
+
+    return True
+
 def finish_conversation(self):
 
     if not (check_duplicate_url(self.host, self.uri)):
-        if check_duplicate_uri(self.uri):
-            self.uri = create_next_uri(self.uri)
+
+        #if check_duplicate_uri(self.uri):
+        #    self.uri = create_next_uri(self.uri)
 
         obj_num = len(conversations)
         conversations.append(namedtuple('Conv',
-            ['id','server_ip', 'uri','req_head','res_body','res_head','res_num','res_type','host','referer', \
+            ['id','server_ip_port', 'uri','req','res_body','res_head','res_num','res_type','host','referer', \
             'filename','method','redirect_to','req_microsec', 'res_len','magic_name', 'magic_ext']))
-
-        host_tuple = (self.host, str(self.remote_host[0]) + ":" + str(self.remote_host[1]))
-        # hosts list
-        if (hosts.has_key(host_tuple)):
-            hosts[host_tuple].append(self.uri + "   [" + str(obj_num) + "]")
-        else:
-            hosts[host_tuple] = [self.uri + "   [" + str(obj_num) + "]"]
 
         # convs list
         conversations[obj_num].id = obj_num
-        conversations[obj_num].server_ip = str(self.remote_host[0]) + ":" + str(self.remote_host[1])
+        conversations[obj_num].server_ip_port = str(self.remote_host[0]) + ":" + str(self.remote_host[1])
         conversations[obj_num].uri = self.uri
         conversations[obj_num].redirect_to = self.redirect_to
         conversations[obj_num].short_uri = getShortURI(self.uri)
-        conversations[obj_num].req_head = self.req_head
+        conversations[obj_num].req = self.req
         conversations[obj_num].res_body = self.res_body
-        add_object("body", self.res_body)
+
 
         try:
             # FindMagic
@@ -279,7 +306,6 @@ def finish_conversation(self):
         if (conversations[obj_num].filename == ""):
             conversations[obj_num].filename = str(obj_num) + ".html"
 
-        objects[obj_num].name = conversations[obj_num].filename
         conversations[obj_num].res_len = self.res_len
 
 # Display all found conversations
@@ -299,7 +325,7 @@ def show_conversations():
             elif ("image" in conv.res_type):
                 typecolor = colors.GREEN
 
-            print str(cnt) + ": " + colors.PINK,
+            print str(conv.id) + ": " + colors.PINK,
             if (b_use_short_uri):
                 print conv.short_uri,
             else:
@@ -339,26 +365,26 @@ def hexdump(src, length=16):
 
 from HTMLParser import HTMLParser
 
-class CapTipperHTMLParser(HTMLParser):
+class srcHTMLParser(HTMLParser):
     def __init__(self, find_tag):
         HTMLParser.__init__(self)
         self.find_tag = find_tag
-        self.iframes = []
+        self.tags = []
 
     def handle_starttag(self, tag, attrs):
         if tag == self.find_tag:
             for att in attrs:
-                if (att[0] == "src"):
-                    self.iframes.append(att[1])
+                if att[0] == "src":
+                    self.tags.append(att[1])
 
-    def print_iframes(self):
-        if (len(self.iframes) > 0):
-            print " " + str(len(self.iframes)) + " Iframe(s) Found!" + newLine
+    def print_objects(self):
+        if len(self.tags) > 0:
+            print " " + str(len(self.tags)) + " {}(s) Found!".format(self.find_tag) + newLine
 
-            for cnt, iframe in enumerate(self.iframes):
-                print " [I] " + str(cnt + 1) + " : " + iframe
+            for cnt, curr_tag in enumerate(self.tags):
+                print " [I] " + str(cnt + 1) + " : " + curr_tag
         else:
-            print "     No Iframes Found"
+            print "     No {} Found".format(self.find_tag)
 
 def update_captipper():
     currentVersion = "v{} b{}".format(VERSION,BUILD)
@@ -482,7 +508,7 @@ def get_request_size(id, size, full_request=False):
     if int(id) >= len(objects) or int(id) < 0:
         raise Exception("   ID number " + str(id) + " isn't within range")
 
-    request = conversations[int(id)].req_head
+    request = conversations[int(id)].req
     if (size.lower() == "all"):
         size = len(request)
     else:
@@ -539,7 +565,7 @@ def ungzip_all():
                 try:
                     id = int(conv.id)
                     name = get_name(id)
-                    obj_num, name = ungzip(id)
+                    obj_num, name = ungzip_and_add(id)
                     if obj_num != -1:
                         print " GZIP Decompression of object {} ({}) successful!".format(str(id), name)
                         print " New object created: {}".format(obj_num) + newLine
@@ -556,8 +582,12 @@ def ungzip(id):
         name = get_name(id)
         decomp = gzip.GzipFile('', 'rb', 9, StringIO.StringIO(body))
         page = decomp.read()
-        obj_num = add_object("ungzip",page,id=id)
 
+    return page, name
+
+def ungzip_and_add(id):
+    page, name = ungzip(id)
+    obj_num = add_object("ungzip",page,id=id)
     return obj_num, name
 
 def dump_all_files(path, dump_exe):
@@ -578,3 +608,21 @@ def dump_file(id, path):
     f.write(body)
     f.close()
     print " Object {} written to {}".format(id, path)
+
+def find_plugin(name):
+    for plug in plugins:
+        if plug.name.lower() == name.lower():
+            return plug.module
+    return None
+
+def run_plugin(name, *args):
+    try:
+        module = find_plugin(name)
+        if module:
+            current = module()
+            result = current.run(*args)
+            return result
+        else:
+            return "Plugin " + name + " Does not exist"
+    except Exception,e:
+        print str(e)

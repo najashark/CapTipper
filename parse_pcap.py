@@ -182,6 +182,8 @@ def run(file_path):
         try:
             pcap_file(conn_dict, infile)
         finally:
+            time.sleep(0.1)
+            CTCore.sort_convs()
             infile.close()
     finally:
         for conn in conn_dict.values():

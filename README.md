@@ -1,5 +1,9 @@
-##CapTipper v0.2
+##CapTipper v0.3
 
+[Logo]: http://4.bp.blogspot.com/-uuRE1KkS5Jo/Vb8j-cfEuHI/AAAAAAAAeY4/MltsTu7jG5E/s1600/CapTipper_logo.png
+![Logo]
+
+CapTipper v0.3: http://www.omriher.com/2015/08/captipper-v03-is-out.html  
 CapTipper v0.2: http://www.omriher.com/2015/03/captipper-02-released.html  
 CapTipper v0.1: http://www.omriher.com/2015/01/captipper-malicious-http-traffic.html  
 
@@ -11,8 +15,10 @@ The tool provides the security researcher with easy access to the files and the 
 and is useful when trying to research exploits, pre-conditions, versions, obfuscations, plugins and shellcodes.
 
 Feeding CapTipper with a drive-by traffic capture (e.g of an exploit kit) displays the user with the requests URI's that were sent and responses meta-data.  
-The user can at this point browse to http://127.0.0.1/[URI] and receive the response back to the browser.  
+The user can at this point browse to http://127.0.0.1/[host]/[URI] and receive the response back to the browser.  
 In addition, an interactive shell is launched for deeper investigation using various commands such as: hosts, hexdump, info, ungzip, body, client, dump and more...
+
+Documentation: http://captipper.readthedocs.org
 
 [ScreenShot]: http://3.bp.blogspot.com/-7XrSKP1BHzE/VLRGBR3cQ0I/AAAAAAAAZso/3FpWTRi8rYU/s1600/CapTipperScreenShot.png
 
@@ -23,7 +29,7 @@ In addition, an interactive shell is launched for deeper investigation using var
 ```sh
 Usage: ./CapTipper.py <PCAP_file> [-p] [web_server_port=80]
 ```
-Let's analyze the following Nuclear EK drive-by infection PCAP [2014-11-06-Nuclear-EK-traffic.pcap](http://www.malware-traffic-analysis.net/2014/11/06/2014-11-06-Nuclear-EK-traffic.pcap)
+Let's analyze the following Nuclear EK drive-by infection PCAP [2014-11-06-Nuclear-EK-traffic.pcap](http://malware-traffic-analysis.net/2014/11/06/2014-11-06-Nuclear-EK-traffic.pcap.zip)
 ```sh
 C:\CapTipper> CapTipper.py "C:\NuclearFiles\2014-11-06-Nuclear-EK-traffic.pcap"
 
